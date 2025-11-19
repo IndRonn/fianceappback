@@ -1,4 +1,4 @@
-package com.finance.financeapp.model;
+package com.finance.financeapp.domain.enums;
 
 /**
  * Enumeración para los roles de usuario.

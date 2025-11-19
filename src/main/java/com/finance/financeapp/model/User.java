@@ -1,5 +1,6 @@
 package com.finance.financeapp.model;
 
+import com.finance.financeapp.domain.enums.Role; // Asegura este import correcto según tu estructura
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -28,37 +29,41 @@ public class User implements UserDetails {
     @SequenceGenerator(name = "USER_SEQ", sequenceName = "USER_ID_SEQ", allocationSize = 1)
     private Long id;
 
-    @Column(nullable = false)
+    @Column(name = "FIRST_NAME", nullable = false)
     private String firstName;
 
+    @Column(name = "LAST_NAME")
     private String lastName;
 
     @Column(nullable = false, unique = true)
     private String email;
 
-    // Usamos 'username' para el login, aunque sea el mismo email
     @Column(nullable = false, unique = true)
     private String username;
 
-    @Column(nullable = false)
+    // *** CORRECCIÓN CRÍTICA AQUÍ ***
+    // Mapeamos el campo 'password' de Java a la columna 'PASSWORD_HASH' de Oracle.
+    @Column(name = "PASSWORD_HASH", nullable = false)
     private String password;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private Role role;
 
-    // --- Implementación de UserDetails (Spring Security) ---
-    // Estas son las columnas "virtuales" que Spring Security necesita.
+    @Column(name = "CREATED_AT", insertable = false, updatable = false)
+    // insertable=false permite que el DEFAULT CURRENT_TIMESTAMP de Oracle funcione si lo deseas,
+    // o puedes manejarlo desde Java con @PrePersist.
+    private java.time.LocalDateTime createdAt;
+
+    // --- Implementación de UserDetails ---
 
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {
-        // Devuelve el rol del usuario como una autoridad para Spring Security
         return List.of(new SimpleGrantedAuthority(role.name()));
     }
 
     @Override
     public String getUsername() {
-        // Spring Security usará el 'username' (que hemos seteado como el email)
         return username;
     }
 
@@ -68,22 +73,14 @@ public class User implements UserDetails {
     }
 
     @Override
-    public boolean isAccountNonExpired() {
-        return true; // No manejamos expiración de cuentas
-    }
+    public boolean isAccountNonExpired() { return true; }
 
     @Override
-    public boolean isAccountNonLocked() {
-        return true; // No manejamos bloqueo de cuentas
-    }
+    public boolean isAccountNonLocked() { return true; }
 
     @Override
-    public boolean isCredentialsNonExpired() {
-        return true; // No manejamos expiración de credenciales
-    }
+    public boolean isCredentialsNonExpired() { return true; }
 
     @Override
-    public boolean isEnabled() {
-        return true; // Cuentas habilitadas por defecto
-    }
+    public boolean isEnabled() { return true; }
 }

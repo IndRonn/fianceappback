@@ -17,16 +17,16 @@ import org.springframework.web.filter.OncePerRequestFilter;
 import java.io.IOException;
 
 /**
- * Filtro que intercepta TODAS las peticiones HTTP (una vez por petición).
- * Se encarga de extraer, validar el token JWT y establecer la autenticación
- * en el SecurityContextHolder.
+ * Filtro de seguridad JWT "Blindado".
+ * Implementa la estrategia de "Fallo Silencioso" para evitar bloqueos 403
+ * en rutas públicas cuando se envían tokens caducados o de usuarios eliminados.
  */
-@Component // Lo marcamos como un Bean de Spring
+@Component
 @RequiredArgsConstructor
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtService jwtService;
-    private final UserDetailsService userDetailsService; // Viene de ApplicationConfig
+    private final UserDetailsService userDetailsService;
 
     @Override
     protected void doFilterInternal(
@@ -35,56 +35,47 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             @NonNull FilterChain filterChain
     ) throws ServletException, IOException {
 
-        // 1. Obtener la cabecera 'Authorization'
         final String authHeader = request.getHeader("Authorization");
-
-        // 2. Validar la cabecera
-        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
-            filterChain.doFilter(request, response); // Petición sin token, se la pasamos al siguiente filtro
-            return;
-        }
-
-        // 3. Extraer el token (quitando el prefijo "Bearer ")
-        final String jwt = authHeader.substring(7);
-
-        // 4. Extraer el username (email) del token
+        final String jwt;
         final String username;
-        try {
-            username = jwtService.extractUsername(jwt);
-        } catch (Exception e) {
-            // Token inválido (expirado, malformado, etc.)
+
+        // 1. Paso rápido: Si no hay autorización, continuar cadena (vital para /register)
+        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
             filterChain.doFilter(request, response);
             return;
         }
 
+        try {
+            jwt = authHeader.substring(7);
+            username = jwtService.extractUsername(jwt);
 
-        // 5. Validar el token y que el usuario no esté ya autenticado
-        if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
+            // 2. Validación de Token
+            if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
 
-            // 6. Cargar el usuario desde la BBDD (usando nuestro UserDetailsService)
-            UserDetails userDetails = this.userDetailsService.loadUserByUsername(username);
+                // Aquí puede saltar UsernameNotFoundException si limpiaste la BD
+                UserDetails userDetails = this.userDetailsService.loadUserByUsername(username);
 
-            // 7. Validar el token contra los datos del usuario
-            if (jwtService.isTokenValid(jwt, userDetails)) {
+                if (jwtService.isTokenValid(jwt, userDetails)) {
+                    UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
+                            userDetails,
+                            null,
+                            userDetails.getAuthorities()
+                    );
+                    authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
 
-                // 8. ¡Éxito! Crear la autenticación
-                UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
-                        userDetails,
-                        null, // No usamos credenciales (password) aquí
-                        userDetails.getAuthorities()
-                );
-
-                // 9. Añadir detalles (IP, etc.) a la autenticación
-                authToken.setDetails(
-                        new WebAuthenticationDetailsSource().buildDetails(request)
-                );
-
-                // 10. Establecer al usuario como AUTENTICADO en el contexto de seguridad
-                SecurityContextHolder.getContext().setAuthentication(authToken);
+                    // Usuario autenticado exitosamente
+                    SecurityContextHolder.getContext().setAuthentication(authToken);
+                }
             }
+        } catch (Exception e) {
+            // 3. ESTRATEGIA DE RESILIENCIA:
+            // Si algo falla con el token (expirado, usuario borrado, malformado),
+            // NO lanzamos error. Limpiamos contexto y dejamos pasar la petición como "Anónima".
+            // Si la ruta requiere auth, Spring Security la rechazará más adelante (403).
+            // Si la ruta es pública, pasará exitosamente (200).
+            SecurityContextHolder.clearContext();
         }
 
-        // 11. Pasar la petición al siguiente filtro en la cadena
         filterChain.doFilter(request, response);
     }
 }
