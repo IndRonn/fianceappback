@@ -24,6 +24,7 @@ public class AccountRequest {
     private String bankName;
 
     @NotNull(message = "El saldo inicial es obligatorio")
+    @DecimalMin(value = "0.00", inclusive = false, message = "El saldo debe ser positivo.")
     private BigDecimal initialBalance;
 
     // Opcionales, solo para tarjetas de crédito

@@ -6,10 +6,6 @@ import lombok.Data;
 
 import java.math.BigDecimal;
 
-/**
- * DTO de respuesta.
- * Ocultamos datos sensibles del usuario, solo devolvemos info de la cuenta.
- */
 @Data
 @Builder
 public class AccountResponse {
@@ -19,4 +15,5 @@ public class AccountResponse {
     private String bankName;
     private BigDecimal initialBalance;
     private Boolean isActive;
+    // Eliminado: private Boolean isCash; -> Redundante, el Frontend validará if (type == 'EFECTIVO')
 }

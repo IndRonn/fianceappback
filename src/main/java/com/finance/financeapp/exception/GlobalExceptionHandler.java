@@ -1,8 +1,10 @@
 package com.finance.financeapp.exception;
 
+import com.finance.financeapp.exception.custom.BusinessRuleException;
+import com.finance.financeapp.exception.custom.ConflictException;
+import com.finance.financeapp.exception.custom.ResourceNotFoundException;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -12,62 +14,61 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import java.time.LocalDateTime;
 import java.util.stream.Collectors;
 
-/**
- * Manejador de Excepciones Global.
- * Intercepta excepciones de toda la aplicación y las formatea
- * en una respuesta JSON consistente (ErrorResponse).
- */
-@RestControllerAdvice // Combina @ControllerAdvice y @ResponseBody
+@RestControllerAdvice
 public class GlobalExceptionHandler {
 
-    /**
-     * Maneja el error de la Prueba 3 (email duplicado).
-     */
-    @ExceptionHandler(IllegalArgumentException.class)
-    @ResponseStatus(HttpStatus.BAD_REQUEST) // 400
-    public ErrorResponse handleIllegalArgumentException(IllegalArgumentException ex, HttpServletRequest request) {
-        return ErrorResponse.builder()
-                .timestamp(LocalDateTime.now())
-                .status(HttpStatus.BAD_REQUEST.value())
-                .error(HttpStatus.BAD_REQUEST.getReasonPhrase())
-                .message(ex.getMessage()) // "El email ya está en uso..."
-                .path(request.getRequestURI())
-                .build();
+    // --- 1. Recurso No Encontrado (404) ---
+    @ExceptionHandler(ResourceNotFoundException.class)
+    @ResponseStatus(HttpStatus.NOT_FOUND)
+    public ErrorResponse handleResourceNotFound(ResourceNotFoundException ex, HttpServletRequest request) {
+        return buildError(HttpStatus.NOT_FOUND, ex.getMessage(), request.getRequestURI());
     }
 
-    /**
-     * Maneja el error de la Prueba 4 (login fallido).
-     */
+    // --- 2. Reglas de Negocio / Validación Lógica (400) ---
+    @ExceptionHandler(BusinessRuleException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public ErrorResponse handleBusinessRule(BusinessRuleException ex, HttpServletRequest request) {
+        return buildError(HttpStatus.BAD_REQUEST, ex.getMessage(), request.getRequestURI());
+    }
+
+    // --- 3. Conflicto de Estado / Duplicados (409) ---
+    @ExceptionHandler(ConflictException.class)
+    @ResponseStatus(HttpStatus.CONFLICT)
+    public ErrorResponse handleConflict(ConflictException ex, HttpServletRequest request) {
+        return buildError(HttpStatus.CONFLICT, ex.getMessage(), request.getRequestURI());
+    }
+
+    // --- Excepciones Estándar de Spring ---
+
     @ExceptionHandler(BadCredentialsException.class)
     @ResponseStatus(HttpStatus.UNAUTHORIZED) // 401
-    public ErrorResponse handleBadCredentialsException(BadCredentialsException ex, HttpServletRequest request) {
-        return ErrorResponse.builder()
-                .timestamp(LocalDateTime.now())
-                .status(HttpStatus.UNAUTHORIZED.value())
-                .error(HttpStatus.UNAUTHORIZED.getReasonPhrase())
-                .message("Credenciales inválidas. Por favor, verifique su email y contraseña.")
-                .path(request.getRequestURI())
-                .build();
+    public ErrorResponse handleBadCredentials(BadCredentialsException ex, HttpServletRequest request) {
+        return buildError(HttpStatus.UNAUTHORIZED, "Credenciales inválidas.", request.getRequestURI());
     }
 
-    /**
-     * Maneja los errores de validación de los DTOs (anotaciones @Valid).
-     * Ej: email sin formato, contraseña < 8 caracteres.
-     */
     @ExceptionHandler(MethodArgumentNotValidException.class)
     @ResponseStatus(HttpStatus.BAD_REQUEST) // 400
-    public ErrorResponse handleValidationException(MethodArgumentNotValidException ex, HttpServletRequest request) {
-        // Concatena todos los mensajes de error de los campos
+    public ErrorResponse handleValidation(MethodArgumentNotValidException ex, HttpServletRequest request) {
         String errors = ex.getBindingResult().getFieldErrors().stream()
-                .map(fieldError -> fieldError.getField() + ": " + fieldError.getDefaultMessage())
+                .map(e -> e.getField() + ": " + e.getDefaultMessage())
                 .collect(Collectors.joining(", "));
+        return buildError(HttpStatus.BAD_REQUEST, errors, request.getRequestURI());
+    }
 
+    // Fallback genérico
+    @ExceptionHandler(Exception.class)
+    @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR) // 500
+    public ErrorResponse handleGeneric(Exception ex, HttpServletRequest request) {
+        return buildError(HttpStatus.INTERNAL_SERVER_ERROR, "Error interno del servidor: " + ex.getMessage(), request.getRequestURI());
+    }
+
+    private ErrorResponse buildError(HttpStatus status, String message, String path) {
         return ErrorResponse.builder()
                 .timestamp(LocalDateTime.now())
-                .status(HttpStatus.BAD_REQUEST.value())
-                .error(HttpStatus.BAD_REQUEST.getReasonPhrase())
-                .message(errors)
-                .path(request.getRequestURI())
+                .status(status.value())
+                .error(status.getReasonPhrase())
+                .message(message)
+                .path(path)
                 .build();
     }
 }

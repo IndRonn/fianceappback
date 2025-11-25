@@ -6,5 +6,6 @@ package com.finance.financeapp.domain.enums;
  */
 public enum AccountType {
     DEBITO,
-    CREDITO
+    CREDITO,
+    EFECTIVO
 }
