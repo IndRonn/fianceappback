@@ -5,7 +5,9 @@ import jakarta.persistence.*;
 import lombok.*;
 
 import java.math.BigDecimal;
-import java.time.LocalDateTime; // Usamos LocalDateTime para precisión, mapea a DATE/TIMESTAMP
+import java.time.LocalDateTime;
+import java.util.HashSet;
+import java.util.Set;
 
 @Getter
 @Setter
@@ -26,7 +28,11 @@ public class Transaction {
     private TransactionType type;
 
     @Column(nullable = false)
-    private BigDecimal amount;
+    private BigDecimal amount; // Monto en moneda de la cuenta origen
+
+    // --- NUEVO: TIPO DE CAMBIO ---
+    @Column(name = "EXCHANGE_RATE", nullable = false)
+    private BigDecimal exchangeRate; // Default 1.00
 
     @Column(length = 4000)
     private String description;
@@ -34,21 +40,29 @@ public class Transaction {
     @Column(name = "TRANSACTION_DATE", nullable = false)
     private LocalDateTime transactionDate;
 
-    // --- RELACIONES ---
-
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "USER_ID", nullable = false)
     private User user;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "ACCOUNT_ID", nullable = false)
-    private Account account; // Cuenta Origen
+    private Account account;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "CATEGORY_ID") // Puede ser NULL en Transferencias
+    @JoinColumn(name = "CATEGORY_ID")
     private Category category;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "DESTINATION_ACCOUNT_ID") // Solo para Transferencias
+    @JoinColumn(name = "DESTINATION_ACCOUNT_ID")
     private Account destinationAccount;
+
+    // --- NUEVO: RELACIÓN N:M CON ETIQUETAS ---
+    @ManyToMany(fetch = FetchType.LAZY)
+    @JoinTable(
+            name = "TRANSACTION_TAGS",
+            joinColumns = @JoinColumn(name = "TRANSACTION_ID"),
+            inverseJoinColumns = @JoinColumn(name = "TAG_ID")
+    )
+    @Builder.Default
+    private Set<Tag> tags = new HashSet<>();
 }

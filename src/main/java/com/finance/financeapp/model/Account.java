@@ -1,6 +1,7 @@
 package com.finance.financeapp.model;
 
 import com.finance.financeapp.domain.enums.AccountType;
+import com.finance.financeapp.domain.enums.CurrencyType; // <--- Nuevo Import
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -27,13 +28,17 @@ public class Account {
     @Column(nullable = false)
     private AccountType type;
 
+    // --- NUEVO: MONEDA ---
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 3)
+    private CurrencyType currency;
+
     @Column(name = "BANK_NAME")
     private String bankName;
 
     @Column(name = "INITIAL_BALANCE", nullable = false)
     private BigDecimal initialBalance;
 
-    // Fechas de corte y pago (Típico de Tarjetas de Crédito)
     @Column(name = "CLOSING_DATE")
     private Integer closingDate;
 
@@ -43,7 +48,6 @@ public class Account {
     @Column(name = "IS_ACTIVE", nullable = false)
     private Boolean isActive;
 
-    // Relación: Muchas cuentas pertenecen a Un usuario
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "USER_ID", nullable = false)
     private User user;

@@ -31,6 +31,7 @@ public class AccountMapper {
                 .initialBalance(request.getInitialBalance())
                 .closingDate(request.getClosingDate())
                 .paymentDate(request.getPaymentDate())
+                .currency(request.getCurrency())
                 .isActive(true) // Por defecto activa al crear
                 .build();
     }
@@ -50,6 +51,7 @@ public class AccountMapper {
                 .type(account.getType()) // El Enum viaja tal cual
                 .bankName(account.getBankName())
                 .initialBalance(account.getInitialBalance())
+                .currency(account.getCurrency())
                 .isActive(account.getIsActive())
                 .build();
     }
@@ -61,6 +63,10 @@ public class AccountMapper {
     public void updateEntityFromRequest(AccountRequest request, Account account) {
         if (request == null || account == null) {
             return;
+        }
+
+        if (request.getCurrency() != null) {
+            account.setCurrency(request.getCurrency());
         }
 
         // Solo actualizamos los campos permitidos

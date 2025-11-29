@@ -8,6 +8,7 @@ import lombok.Data;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Data
 public class TransactionRequest {
@@ -33,4 +34,8 @@ public class TransactionRequest {
 
     // Obligatorio solo para transferencias
     private Long destinationAccountId;
+
+    private BigDecimal exchangeRate;
+
+    private List<Long> tagIds;
 }

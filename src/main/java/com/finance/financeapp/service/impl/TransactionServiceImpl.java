@@ -6,14 +6,8 @@ import com.finance.financeapp.dto.transaction.TransactionResponse;
 import com.finance.financeapp.exception.custom.BusinessRuleException;
 import com.finance.financeapp.exception.custom.ResourceNotFoundException;
 import com.finance.financeapp.mapper.TransactionMapper;
-import com.finance.financeapp.model.Account;
-import com.finance.financeapp.model.Category;
-import com.finance.financeapp.model.Transaction;
-import com.finance.financeapp.model.User;
-import com.finance.financeapp.repository.IAccountRepository;
-import com.finance.financeapp.repository.ICategoryRepository;
-import com.finance.financeapp.repository.ITransactionRepository;
-import com.finance.financeapp.repository.IUserRepository;
+import com.finance.financeapp.model.*;
+import com.finance.financeapp.repository.*;
 import com.finance.financeapp.service.ITransactionService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -21,7 +15,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
@@ -33,6 +29,7 @@ public class TransactionServiceImpl implements ITransactionService {
     private final IAccountRepository accountRepository;
     private final ICategoryRepository categoryRepository;
     private final TransactionMapper transactionMapper;
+    private final ITagRepository tagRepository;
 
     // --- Helpers ---
 
@@ -54,6 +51,33 @@ public class TransactionServiceImpl implements ITransactionService {
                 .orElseThrow(() -> new ResourceNotFoundException("Transacción no encontrada o acceso denegado."));
     }
 
+    private Set<Tag> getTagsFromRequest(List<Long> tagIds, Long userId) {
+        if (tagIds == null || tagIds.isEmpty()) {
+            return new HashSet<>();
+        }
+
+        // Convertir List a Set para evitar duplicados en la query
+        Set<Long> uniqueIds = new HashSet<>(tagIds);
+
+        List<Tag> foundTags = tagRepository.findAllByIdIn(uniqueIds);
+
+        // Validación estricta: ¿Todas las etiquetas encontradas pertenecen al usuario?
+        // Si alguna es de otro usuario, lanzamos error o la filtramos.
+        // Hard Mode: Filtramos silenciosamente las ajenas para no dar pistas de seguridad,
+        // o lanzamos 404 si no encontramos lo que pidió.
+
+        Set<Tag> validTags = foundTags.stream()
+                .filter(t -> t.getUser().getId().equals(userId))
+                .collect(Collectors.toSet());
+
+        if (validTags.size() != uniqueIds.size()) {
+            throw new ResourceNotFoundException("Algunas etiquetas no existen o no te pertenecen");
+            // Por ahora, permitimos guardar solo las válidas.
+        }
+
+        return validTags;
+    }
+
     // --- CRUD ---
 
     @Override
@@ -65,6 +89,11 @@ public class TransactionServiceImpl implements ITransactionService {
 
         Account sourceAccount = findAccountAndVerifyOwnership(request.getAccountId(), user.getId(), "Origen");
         transaction.setAccount(sourceAccount);
+
+        applyTransactionLogic(transaction, request, sourceAccount, user.getId());
+
+        Set<Tag> tags = getTagsFromRequest(request.getTagIds(), user.getId());
+        transaction.setTags(tags);
 
         applyTransactionLogic(transaction, request, sourceAccount, user.getId());
 
@@ -108,6 +137,10 @@ public class TransactionServiceImpl implements ITransactionService {
         existingTrx.setAmount(request.getAmount());
         existingTrx.setDescription(request.getDescription());
         existingTrx.setTransactionDate(request.getTransactionDate());
+        existingTrx.setExchangeRate(request.getExchangeRate() != null ? request.getExchangeRate() : BigDecimal.ONE);
+
+        Set<Tag> newTags = getTagsFromRequest(request.getTagIds(), user.getId());
+        existingTrx.setTags(newTags); // JPA maneja la tabla intermedia automáticamente
 
         Account newSourceAccount = findAccountAndVerifyOwnership(request.getAccountId(), user.getId(), "Origen");
         existingTrx.setAccount(newSourceAccount);

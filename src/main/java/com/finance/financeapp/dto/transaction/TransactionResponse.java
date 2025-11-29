@@ -1,11 +1,13 @@
 package com.finance.financeapp.dto.transaction;
 
 import com.finance.financeapp.domain.enums.TransactionType;
+import com.finance.financeapp.dto.tag.TagResponse;
 import lombok.Builder;
 import lombok.Data;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Data
 @Builder
@@ -25,4 +27,7 @@ public class TransactionResponse {
 
     private Long destinationAccountId;
     private String destinationAccountName;
+
+    private BigDecimal exchangeRate;
+    private List<TagResponse> tags;
 }

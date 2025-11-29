@@ -1,6 +1,7 @@
 package com.finance.financeapp.dto.account;
 
 import com.finance.financeapp.domain.enums.AccountType;
+import com.finance.financeapp.domain.enums.CurrencyType;
 import lombok.Builder;
 import lombok.Data;
 
@@ -15,5 +16,6 @@ public class AccountResponse {
     private String bankName;
     private BigDecimal initialBalance;
     private Boolean isActive;
+    private CurrencyType currency;
     // Eliminado: private Boolean isCash; -> Redundante, el Frontend validará if (type == 'EFECTIVO')
 }

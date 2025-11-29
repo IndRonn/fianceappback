@@ -1,6 +1,7 @@
 package com.finance.financeapp.dto.account;
 
 import com.finance.financeapp.domain.enums.AccountType;
+import com.finance.financeapp.domain.enums.CurrencyType;
 import jakarta.validation.constraints.*;
 import lombok.Data;
 
@@ -33,4 +34,7 @@ public class AccountRequest {
 
     @Min(1) @Max(31)
     private Integer paymentDate;
+
+    @NotNull(message = "La moneda es obligatoria")
+    private CurrencyType currency;
 }
