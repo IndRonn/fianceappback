@@ -2,7 +2,6 @@ package com.finance.financeapp.service.impl;
 
 import com.finance.financeapp.dto.budget.BudgetRequest;
 import com.finance.financeapp.dto.budget.BudgetResponse;
-import com.finance.financeapp.exception.custom.BusinessRuleException;
 import com.finance.financeapp.exception.custom.ConflictException;
 import com.finance.financeapp.exception.custom.ResourceNotFoundException;
 import com.finance.financeapp.model.Budget;

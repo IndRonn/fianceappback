@@ -12,7 +12,7 @@ import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
 // *** NUEVA IMPORTACIÓN ***
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
-import org.springframework.http.HttpMethod;
+
 @Configuration
 @EnableWebSecurity
 @EnableMethodSecurity
@@ -23,7 +23,6 @@ public class SecurityConfig {
     private final JwtAuthenticationFilter jwtAuthFilter; // El filtro que acabamos de crear
     private final AuthenticationProvider authenticationProvider;
 
-    private static final String API_PREFIX = "/api/v1";
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
