@@ -30,4 +30,19 @@ public interface ITransactionRepository extends JpaRepository<Transaction, Long>
             @Param("startDate") LocalDateTime startDate,
             @Param("endDate") LocalDateTime endDate
     );
+
+    @Query("""
+        SELECT COALESCE(SUM(t.amount * t.exchangeRate), 0)
+        FROM Transaction t
+        JOIN t.category c
+        WHERE t.user.id = :userId
+          AND t.type = 'GASTO'
+          AND c.managementType = 'DIA_A_DIA'
+          AND t.transactionDate BETWEEN :startDate AND :endDate
+    """)
+    BigDecimal sumTotalVariableExpenses(
+            @Param("userId") Long userId,
+            @Param("startDate") LocalDateTime startDate,
+            @Param("endDate") LocalDateTime endDate
+    );
 }
