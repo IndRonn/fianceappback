@@ -30,17 +30,23 @@ public class SecurityConfig {
         http
                 .csrf(AbstractHttpConfigurer::disable)
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-                        .requestMatchers(API_PREFIX + "/auth/**").permitAll()
+                        // 1. Permitir endpoints públicos de autenticación
+                        .requestMatchers("/api/v1/auth/**").permitAll()
+
+                        // 2. Permitir Documentación API (Swagger/OpenAPI) - ¡ESTO FALTABA!
+                        .requestMatchers(
+                                "/v3/api-docs/**",
+                                "/swagger-ui/**",
+                                "/swagger-ui.html"
+                        ).permitAll()
+
+                        // 3. Todo lo demás requiere autenticación
                         .anyRequest().authenticated()
                 )
                 .sessionManagement(session -> session
                         .sessionCreationPolicy(SessionCreationPolicy.STATELESS)
                 )
                 .authenticationProvider(authenticationProvider)
-
-                // *** LÍNEA CLAVE AÑADIDA ***
-                // 5. Añadir nuestro filtro JWT ANTES del filtro de autenticación estándar
                 .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();

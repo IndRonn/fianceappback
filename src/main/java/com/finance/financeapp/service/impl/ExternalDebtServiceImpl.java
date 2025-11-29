@@ -87,4 +87,50 @@ public class ExternalDebtServiceImpl implements IExternalDebtService {
         debt.setCurrentBalance(debt.getCurrentBalance().subtract(request.getAmount()));
         repository.save(debt);
     }
+
+    @Override
+    @Transactional
+    public DebtResponse updateDebt(Long id, DebtRequest request) {
+        User user = getAuthenticatedUser();
+        ExternalDebt debt = repository.findById(id)
+                .filter(d -> d.getUser().getId().equals(user.getId()))
+                .orElseThrow(() -> new ResourceNotFoundException("Deuda no encontrada"));
+
+        // 1. Calcular cuánto se ha pagado hasta ahora (Amortizado real)
+        // Paid = TotalOriginal - SaldoActual
+        BigDecimal amountPaid = debt.getTotalAmount().subtract(debt.getCurrentBalance());
+
+        // 2. Actualizar campos descriptivos
+        debt.setName(request.getName());
+        debt.setCreditor(request.getCreditor());
+
+        // 3. Actualizar Monto Total y Recalcular Saldo con inteligencia financiera
+        if (request.getTotalAmount().compareTo(BigDecimal.ZERO) > 0) {
+            debt.setTotalAmount(request.getTotalAmount());
+            // El nuevo saldo es el Nuevo Total menos lo que ya pagaste
+            // Ejemplo: Debía 100, pagué 20 (Saldo 80).
+            // Corrección: Debía 200. Nuevo Saldo = 200 - 20 = 180.
+            debt.setCurrentBalance(request.getTotalAmount().subtract(amountPaid));
+        }
+
+        // Validación de Seguridad: El saldo no puede ser negativo (no puedes haber pagado más de lo que debes)
+        if (debt.getCurrentBalance().compareTo(BigDecimal.ZERO) < 0) {
+            throw new BusinessRuleException("El nuevo monto total es menor a lo que ya has amortizado.");
+        }
+
+        return mapper.toResponse(repository.save(debt));
+    }
+
+    @Override
+    @Transactional
+    public void deleteDebt(Long id) {
+        User user = getAuthenticatedUser();
+        ExternalDebt debt = repository.findById(id)
+                .filter(d -> d.getUser().getId().equals(user.getId()))
+                .orElseThrow(() -> new ResourceNotFoundException("Deuda no encontrada"));
+
+        // Nota: Las transacciones de amortización pasadas (GASTOS) quedan en el historial.
+        // Solo borramos la ficha de la deuda.
+        repository.delete(debt);
+    }
 }

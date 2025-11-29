@@ -27,4 +27,17 @@ public class SavingsGoalController {
     public ResponseEntity<List<SavingsGoalResponse>> getAll() {
         return ResponseEntity.ok(service.getMyGoals());
     }
+
+    @PutMapping("/{id}")
+    public ResponseEntity<SavingsGoalResponse> updateGoal(
+            @PathVariable Long id,
+            @Valid @RequestBody SavingsGoalRequest request) {
+        return ResponseEntity.ok(service.updateGoal(id, request));
+    }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> deleteGoal(@PathVariable Long id) {
+        service.deleteGoal(id);
+        return ResponseEntity.noContent().build();
+    }
 }

@@ -8,4 +8,6 @@ import java.util.List;
 public interface ISavingsGoalService {
     SavingsGoalResponse createGoal(SavingsGoalRequest request);
     List<SavingsGoalResponse> getMyGoals();
+    SavingsGoalResponse updateGoal(Long id, SavingsGoalRequest request);
+    void deleteGoal(Long id);
 }

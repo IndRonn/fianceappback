@@ -22,4 +22,7 @@ public interface IBudgetService {
      * @return Lista de presupuestos enriquecida con estado y porcentajes.
      */
     List<BudgetResponse> getBudgets(Integer month, Integer year);
+
+    BudgetResponse updateBudget(Long id, BudgetRequest request);
+    void deleteBudget(Long id);
 }

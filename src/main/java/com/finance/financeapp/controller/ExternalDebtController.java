@@ -42,4 +42,20 @@ public class ExternalDebtController {
         debtService.amortizeDebt(id, request);
         return ResponseEntity.ok().build();
     }
+
+    // PUT /api/v1/external-debts/{id}
+    @PutMapping("/{id}")
+    public ResponseEntity<DebtResponse> updateDebt(
+            @PathVariable Long id,
+            @Valid @RequestBody DebtRequest request
+    ) {
+        return ResponseEntity.ok(debtService.updateDebt(id, request));
+    }
+
+    // DELETE /api/v1/external-debts/{id}
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> deleteDebt(@PathVariable Long id) {
+        debtService.deleteDebt(id);
+        return ResponseEntity.noContent().build();
+    }
 }

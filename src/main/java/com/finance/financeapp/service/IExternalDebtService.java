@@ -12,4 +12,6 @@ public interface IExternalDebtService {
     DebtResponse createDebt(DebtRequest request);
     List<DebtResponse> getMyDebts();
     void amortizeDebt(Long debtId, DebtPaymentRequest request);
+    DebtResponse updateDebt(Long id, DebtRequest request);
+    void deleteDebt(Long id);
 }

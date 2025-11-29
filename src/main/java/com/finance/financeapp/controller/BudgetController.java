@@ -37,4 +37,17 @@ public class BudgetController {
         // "Hard Mode": Si no envían params, Spring lanzará 400 Bad Request automáticamente.
         return ResponseEntity.ok(budgetService.getBudgets(month, year));
     }
+
+    @PutMapping("/{id}")
+    public ResponseEntity<BudgetResponse> updateBudget(
+            @PathVariable Long id,
+            @Valid @RequestBody BudgetRequest request) {
+        return ResponseEntity.ok(budgetService.updateBudget(id, request));
+    }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> deleteBudget(@PathVariable Long id) {
+        budgetService.deleteBudget(id);
+        return ResponseEntity.noContent().build();
+    }
 }

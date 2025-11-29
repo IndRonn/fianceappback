@@ -127,4 +127,34 @@ public class BudgetServiceImpl implements IBudgetService {
                 .status(status)
                 .build();
     }
+
+    @Override
+    @Transactional
+    public BudgetResponse updateBudget(Long id, BudgetRequest request) {
+        User user = getAuthenticatedUser();
+        Budget budget = budgetRepository.findById(id)
+                .filter(b -> b.getUser().getId().equals(user.getId()))
+                .orElseThrow(() -> new ResourceNotFoundException("Presupuesto no encontrado"));
+
+        // Validaciones de integridad
+        // Si intenta cambiar categoría/mes/año a uno que YA EXISTE en otro presupuesto, conflicto.
+        // (Omitimos validación profunda por brevedad, pero idealmente se hace).
+
+        budget.setAmount(request.getLimitAmount());
+        // Generalmente no permitimos cambiar mes/año/categoría de un presupuesto vivo, solo el monto.
+        // Si quiere cambiar todo, mejor que lo borre y cree otro.
+
+        return mapToResponse(budgetRepository.save(budget));
+    }
+
+    @Override
+    @Transactional
+    public void deleteBudget(Long id) {
+        User user = getAuthenticatedUser();
+        Budget budget = budgetRepository.findById(id)
+                .filter(b -> b.getUser().getId().equals(user.getId()))
+                .orElseThrow(() -> new ResourceNotFoundException("Presupuesto no encontrado"));
+
+        budgetRepository.delete(budget);
+    }
 }
