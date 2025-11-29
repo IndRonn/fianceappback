@@ -1,12 +1,12 @@
 package com.finance.financeapp.controller;
 
+import com.finance.financeapp.dto.daily.DailyCloseRequest;
 import com.finance.financeapp.dto.daily.DailyStatusResponse;
 import com.finance.financeapp.service.IDailyService;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/api/v1/daily")
@@ -20,5 +20,11 @@ public class DailyController {
     @GetMapping("/status")
     public ResponseEntity<DailyStatusResponse> getDailyStatus() {
         return ResponseEntity.ok(dailyService.getDailyStatus());
+    }
+
+    @PostMapping("/close")
+    public ResponseEntity<Void> closeDailyBox(@Valid @RequestBody DailyCloseRequest request) {
+        dailyService.closeDailyBox(request);
+        return ResponseEntity.ok().build();
     }
 }
