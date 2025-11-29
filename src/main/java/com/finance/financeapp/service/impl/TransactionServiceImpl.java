@@ -56,6 +56,7 @@ public class TransactionServiceImpl implements ITransactionService {
             return new HashSet<>();
         }
 
+
         // Convertir List a Set para evitar duplicados en la query
         Set<Long> uniqueIds = new HashSet<>(tagIds);
 
@@ -76,6 +77,22 @@ public class TransactionServiceImpl implements ITransactionService {
         }
 
         return validTags;
+    }
+
+    private void updateAccountBalance(Account account, BigDecimal amount) {
+        if (account.getType() == AccountType.CREDITO) {
+            // Lógica para Crédito (Pasivo):
+            // El saldo representa DEUDA.
+            // - Gasto (amount negativo): Aumenta la deuda (Resta de negativo = Suma).
+            // - Pago (amount positivo): Disminuye la deuda (Resta de positivo = Resta).
+            account.setInitialBalance(account.getInitialBalance().subtract(amount));
+        } else {
+            // Lógica para Débito/Efectivo (Activo):
+            // El saldo representa DINERO DISPONIBLE.
+            // - Gasto (amount negativo): Disminuye el saldo (Suma de negativo = Resta).
+            // - Ingreso (amount positivo): Aumenta el saldo.
+            account.setInitialBalance(account.getInitialBalance().add(amount));
+        }
     }
 
     // --- CRUD ---
@@ -163,51 +180,67 @@ public class TransactionServiceImpl implements ITransactionService {
     private void applyTransactionLogic(Transaction trx, TransactionRequest req, Account srcAcc, Long userId) {
         switch (trx.getType()) {
             case GASTO:
-                if (req.getCategoryId() == null) throw new BusinessRuleException("La categoría es obligatoria para gastos.");
+                // Validaciones específicas de Gasto
+                if (req.getCategoryId() == null) {
+                    throw new BusinessRuleException("La categoría es obligatoria para gastos.");
+                }
                 Category catExpense = categoryRepository.findById(req.getCategoryId())
                         .filter(c -> c.getUser().getId().equals(userId))
                         .orElseThrow(() -> new ResourceNotFoundException("Categoría no encontrada."));
                 trx.setCategory(catExpense);
 
-                if (srcAcc.getType() == AccountType.CREDITO) {
-                    srcAcc.setInitialBalance(srcAcc.getInitialBalance().add(req.getAmount()));
-                } else {
-                    srcAcc.setInitialBalance(srcAcc.getInitialBalance().subtract(req.getAmount()));
-                }
+                // Gasto: El dinero SALE de la cuenta (-amount)
+                updateAccountBalance(srcAcc, req.getAmount().negate());
                 break;
 
             case INGRESO:
-                if (req.getCategoryId() == null) throw new BusinessRuleException("La categoría es obligatoria para ingresos.");
+                // Validaciones específicas de Ingreso
+                if (req.getCategoryId() == null) {
+                    throw new BusinessRuleException("La categoría es obligatoria para ingresos.");
+                }
                 Category catIncome = categoryRepository.findById(req.getCategoryId())
                         .filter(c -> c.getUser().getId().equals(userId))
                         .orElseThrow(() -> new ResourceNotFoundException("Categoría no encontrada."));
                 trx.setCategory(catIncome);
 
-                if (srcAcc.getType() == AccountType.CREDITO) {
-                    srcAcc.setInitialBalance(srcAcc.getInitialBalance().subtract(req.getAmount()));
-                } else {
-                    srcAcc.setInitialBalance(srcAcc.getInitialBalance().add(req.getAmount()));
-                }
+                // Ingreso: El dinero ENTRA a la cuenta (+amount)
+                updateAccountBalance(srcAcc, req.getAmount());
                 break;
 
             case TRANSFERENCIA:
-                if (req.getDestinationAccountId() == null) throw new BusinessRuleException("Cuenta destino obligatoria.");
-                if (req.getAccountId().equals(req.getDestinationAccountId())) throw new BusinessRuleException("Origen y destino no pueden ser iguales.");
+                // Validaciones específicas de Transferencia
+                if (req.getDestinationAccountId() == null) {
+                    throw new BusinessRuleException("Cuenta destino obligatoria.");
+                }
+                if (req.getAccountId().equals(req.getDestinationAccountId())) {
+                    throw new BusinessRuleException("Origen y destino no pueden ser iguales.");
+                }
 
                 Account destAcc = findAccountAndVerifyOwnership(req.getDestinationAccountId(), userId, "Destino");
                 trx.setDestinationAccount(destAcc);
 
-                if (srcAcc.getType() == AccountType.CREDITO) {
-                    srcAcc.setInitialBalance(srcAcc.getInitialBalance().add(req.getAmount()));
+                // 1. RETIRO: Siempre en la moneda de la cuenta ORIGEN (-amount)
+                updateAccountBalance(srcAcc, req.getAmount().negate());
+
+                // 2. DEPÓSITO: Cálculo Multi-moneda
+                BigDecimal amountToDeposit;
+
+                if (srcAcc.getCurrency().equals(destAcc.getCurrency())) {
+                    // Mismo moneda: Transferencia 1 a 1
+                    amountToDeposit = req.getAmount();
                 } else {
-                    srcAcc.setInitialBalance(srcAcc.getInitialBalance().subtract(req.getAmount()));
+                    // Diferente moneda: Aplicar Tasa de Cambio
+                    // Validamos integridad del request
+                    if (req.getExchangeRate() == null || req.getExchangeRate().compareTo(BigDecimal.ZERO) <= 0) {
+                        throw new BusinessRuleException("Tasa de cambio obligatoria y positiva para transferencias entre monedas distintas.");
+                    }
+
+                    // Conversión: Monto Origen * Tasa = Monto Destino
+                    amountToDeposit = req.getAmount().multiply(req.getExchangeRate());
                 }
 
-                if (destAcc.getType() == AccountType.CREDITO) {
-                    destAcc.setInitialBalance(destAcc.getInitialBalance().subtract(req.getAmount()));
-                } else {
-                    destAcc.setInitialBalance(destAcc.getInitialBalance().add(req.getAmount()));
-                }
+                // El dinero ENTRA a la cuenta destino (+amount calculado)
+                updateAccountBalance(destAcc, amountToDeposit);
                 break;
         }
     }

@@ -28,7 +28,7 @@ public class Budget {
     @Column(nullable = false)
     private Integer year;
 
-    // Relaciones
+    // Relaciones (FetchType.LAZY es vital para el rendimiento)
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "USER_ID", nullable = false)
     private User user;

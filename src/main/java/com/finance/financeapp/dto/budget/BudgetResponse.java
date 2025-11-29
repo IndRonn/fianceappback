@@ -10,8 +10,19 @@ import java.math.BigDecimal;
 public class BudgetResponse {
     private Long id;
     private String categoryName;
-    private BigDecimal limitAmount; // Lo planificado
-    private BigDecimal spentAmount; // La realidad (Calculado)
-    private BigDecimal remainingAmount; // Lo que sobra (Calculado)
-    private double percentage; // Para la barra de progreso
+
+    // Mapeado desde entity.getAmount()
+    private BigDecimal limitAmount;
+
+    // Calculado (Suma de transacciones)
+    private BigDecimal spentAmount;
+
+    // Calculado (limit - spent)
+    private BigDecimal remainingAmount;
+
+    // Calculado (spent / limit * 100)
+    private double percentage;
+
+    // Calculado (OK, WARNING, DANGER)
+    private String status; // <--- ¡Aquí está!
 }
