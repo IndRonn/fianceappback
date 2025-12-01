@@ -39,6 +39,9 @@ public class Account {
     @Column(name = "INITIAL_BALANCE", nullable = false)
     private BigDecimal initialBalance;
 
+    @Column(name = "CREDIT_LIMIT")
+    private BigDecimal creditLimit;
+
     @Column(name = "CLOSING_DATE")
     private Integer closingDate;
 

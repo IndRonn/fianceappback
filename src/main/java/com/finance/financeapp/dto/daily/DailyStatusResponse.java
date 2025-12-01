@@ -22,4 +22,11 @@ public class DailyStatusResponse {
     // Semáforo Diario (Diferente al mensual)
     // ON_TRACK (Vas bien), OVERSPENT (Te pasaste hoy, mañana tendrás menos)
     private String status;
+
+    // Retrospectiva: ¿Cuánto gasté ayer en "Día a Día"?
+    private BigDecimal yesterdaySpent;
+
+    // Motivación: ¿Cuánto tendré mañana si hoy gasto 0?
+    // Fórmula: (DisponibleHoy * DiasRestantes) / (DiasRestantes - 1)
+    private BigDecimal projectedAvailableTomorrow;
 }

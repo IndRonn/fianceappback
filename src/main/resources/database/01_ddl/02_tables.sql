@@ -45,6 +45,25 @@ CREATE TABLE ACCOUNTS (
                           CONSTRAINT CHK_ACC_ACTIVE CHECK (IS_ACTIVE IN (0, 1))
 );
 
+CREATE TABLE ACCOUNTS (
+                          ID NUMBER PRIMARY KEY,
+                          USER_ID NUMBER NOT NULL,
+                          NAME VARCHAR2(100) NOT NULL,
+                          TYPE VARCHAR2(20) NOT NULL CHECK (TYPE IN ('DEBITO', 'CREDITO', 'EFECTIVO')),
+                          CURRENCY VARCHAR2(3) DEFAULT 'PEN' NOT NULL CHECK (CURRENCY IN ('PEN', 'USD')),
+                          BANK_NAME VARCHAR2(100),
+
+    -- El saldo actual (Para crédito: negativo = deuda, positivo = a favor)
+                          INITIAL_BALANCE NUMBER(12, 2) DEFAULT 0.00 NOT NULL,
+
+    -- NUEVA COLUMNA: Límite de Crédito (Vital para calcular % de uso)
+                          CREDIT_LIMIT NUMBER(12, 2) NULL,
+
+                          CLOSING_DATE NUMBER(2),
+                          PAYMENT_DATE NUMBER(2),
+                          IS_ACTIVE NUMBER(1) DEFAULT 1 NOT NULL CHECK (IS_ACTIVE IN (0, 1))
+);
+
 -- ======================================================================
 -- 3. TABLA: CATEGORIES
 -- ======================================================================

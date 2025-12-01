@@ -36,9 +36,8 @@ public class DailyServiceImpl implements IDailyService {
     private final ITransactionRepository transactionRepository;
     private final IUserRepository userRepository;
     private final ISavingsGoalRepository savingsGoalRepository;
-    private final ITransactionService transactionService; // Reutilizamos lógica de transacciones
+    private final ITransactionService transactionService;
 
-    // --- Helper Privado (Respuesta a tu duda 1) ---
     private User getAuthenticatedUser() {
         String username = SecurityContextHolder.getContext().getAuthentication().getName();
         return userRepository.findByUsername(username)
@@ -48,15 +47,21 @@ public class DailyServiceImpl implements IDailyService {
     @Override
     @Transactional(readOnly = true)
     public DailyStatusResponse getDailyStatus() {
-        User user = getAuthenticatedUser(); // Usamos el helper aquí
+        User user = getAuthenticatedUser();
 
-        // 1. Fechas
+        // 1. Fechas Base
         LocalDate today = LocalDate.now();
         YearMonth currentMonth = YearMonth.from(today);
+
+        // Rango Mes Actual
         LocalDateTime startOfMonth = currentMonth.atDay(1).atStartOfDay();
         LocalDateTime endOfMonth = currentMonth.atEndOfMonth().atTime(23, 59, 59);
 
-        // 2. Presupuestos Día a Día
+        // Rango Ayer (Para retrospectiva)
+        LocalDateTime startOfYesterday = today.minusDays(1).atStartOfDay();
+        LocalDateTime endOfYesterday = today.minusDays(1).atTime(23, 59, 59);
+
+        // 2. Obtener Presupuestos Día a Día (Planificado Total)
         List<Budget> variableBudgets = budgetRepository.findByUserIdAndMonthAndYearAndType(
                 user.getId(), today.getMonthValue(), today.getYear(), ManagementType.DIA_A_DIA
         );
@@ -65,23 +70,47 @@ public class DailyServiceImpl implements IDailyService {
                 .map(Budget::getAmount)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
-        // 3. Gastos Reales
+        // 3. Gastos Reales (Acumulado Mes)
         BigDecimal totalSpent = transactionRepository.sumTotalVariableExpenses(
                 user.getId(), startOfMonth, endOfMonth
         );
 
-        // 4. Cálculos
+        // --- NUEVO CÁLCULO: Gasto de Ayer ---
+        BigDecimal yesterdaySpent = transactionRepository.sumTotalVariableExpenses(
+                user.getId(), startOfYesterday, endOfYesterday
+        );
+
+        // 4. Cálculos de Disponibilidad
         BigDecimal remainingBudget = totalLimit.subtract(totalSpent);
         int daysInMonth = currentMonth.lengthOfMonth();
         int daysPassed = today.getDayOfMonth() - 1;
         int remainingDays = daysInMonth - daysPassed;
+
         if (remainingDays <= 0) remainingDays = 1;
 
+        // Disponible HOY
         BigDecimal availableToday = BigDecimal.ZERO;
         if (remainingBudget.compareTo(BigDecimal.ZERO) > 0) {
             availableToday = remainingBudget.divide(BigDecimal.valueOf(remainingDays), 2, RoundingMode.FLOOR);
         }
 
+        // --- NUEVO CÁLCULO: Proyección Mañana (Motivación) ---
+        // Si no gastas nada hoy, esto tendrás mañana.
+        BigDecimal projectedTomorrow = BigDecimal.ZERO;
+
+        // Lógica: Si hoy no gasto, mañana tendré el mismo remainingBudget, pero dividido entre (días - 1).
+        if (remainingDays > 1 && remainingBudget.compareTo(BigDecimal.ZERO) > 0) {
+            projectedTomorrow = remainingBudget.divide(
+                    BigDecimal.valueOf(remainingDays - 1),
+                    2,
+                    RoundingMode.FLOOR
+            );
+        } else if (remainingDays == 1) {
+            // Si es el último día, lo que sobra es ahorro puro (o disponible del 1ro del sig mes, según se vea)
+            projectedTomorrow = remainingBudget;
+        }
+
+        // 5. Semáforo
         String status = "ON_TRACK";
         if (remainingBudget.compareTo(BigDecimal.ZERO) < 0) status = "OVERSPENT";
         else if (availableToday.compareTo(BigDecimal.ZERO) == 0 && remainingDays > 0) status = "STOP";
@@ -93,6 +122,9 @@ public class DailyServiceImpl implements IDailyService {
                 .totalMonthSpent(totalSpent)
                 .remainingDays(remainingDays)
                 .status(status)
+                // Nuevos campos
+                .yesterdaySpent(yesterdaySpent)
+                .projectedAvailableTomorrow(projectedTomorrow)
                 .build();
     }
 
@@ -102,11 +134,10 @@ public class DailyServiceImpl implements IDailyService {
         User user = getAuthenticatedUser();
 
         if (request.getAction() == DailyCloseRequest.DailyCloseAction.ROLLOVER) {
-            return; // No hacemos nada, el dinero se queda disponible para mañana
+            return;
         }
 
         if (request.getAction() == DailyCloseRequest.DailyCloseAction.SAVE) {
-            // Validaciones
             if (request.getTargetSavingsGoalId() == null) {
                 throw new BusinessRuleException("Falta ID de Meta de Ahorro.");
             }
@@ -121,22 +152,16 @@ public class DailyServiceImpl implements IDailyService {
                     .filter(g -> g.getUser().getId().equals(user.getId()))
                     .orElseThrow(() -> new ResourceNotFoundException("Meta de ahorro no encontrada."));
 
-            // 1. Crear Transacción de Gasto (Sacar el dinero de la cuenta)
             TransactionRequest trxReq = new TransactionRequest();
             trxReq.setAmount(request.getAmount());
             trxReq.setType(TransactionType.GASTO);
             trxReq.setAccountId(request.getSourceAccountId());
             trxReq.setTransactionDate(LocalDateTime.now());
             trxReq.setDescription("Cierre Diario -> Ahorro: " + goal.getName());
-
-            // ¡AQUÍ ESTÁ LA RESPUESTA A TU DUDA 2!
-            // Asignamos la categoría (ej: "Ahorro") que viene del frontend
             trxReq.setCategoryId(request.getCategoryId());
 
-            // Usamos el servicio existente para que valide saldos y cree el registro
             transactionService.createTransaction(trxReq);
 
-            // 2. Aumentar la Meta de Ahorro
             goal.setCurrentAmount(goal.getCurrentAmount().add(request.getAmount()));
             savingsGoalRepository.save(goal);
         }

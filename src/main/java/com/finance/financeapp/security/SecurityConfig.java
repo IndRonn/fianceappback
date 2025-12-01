@@ -35,6 +35,7 @@ public class SecurityConfig {
                         // 2. Permitir Documentación API (Swagger/OpenAPI) - ¡ESTO FALTABA!
                         .requestMatchers(
                                 "/v3/api-docs/**",
+                                "/v3/api-docs.yaml",
                                 "/swagger-ui/**",
                                 "/swagger-ui.html"
                         ).permitAll()

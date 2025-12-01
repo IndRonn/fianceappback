@@ -15,7 +15,15 @@ public class AccountResponse {
     private AccountType type;
     private String bankName;
     private BigDecimal initialBalance;
+    private BigDecimal creditLimit;
     private Boolean isActive;
     private CurrencyType currency;
-    // Eliminado: private Boolean isCash; -> Redundante, el Frontend validará if (type == 'EFECTIVO')
+
+    // --- CAMPOS DE FECHAS (Vitales para TC) ---
+    private Integer closingDate; // Día de cierre (1-31)
+    private Integer paymentDate; // Día de pago (1-31)
+
+    // --- NUEVO CAMPO: BALANCE DEL CICLO ---
+    // Este es el que faltaba y causaba el error
+    private BigDecimal statementBalance;
 }

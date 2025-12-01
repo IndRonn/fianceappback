@@ -7,6 +7,8 @@
 -- 1. LIMPIEZA TOTAL (DROP OBJECTS)
 -- ======================================================================
 
+
+
 BEGIN
     -- Tablas dependientes (Hijas) primero
     EXECUTE IMMEDIATE 'DROP TABLE TRANSACTION_TAGS CASCADE CONSTRAINTS';
@@ -124,10 +126,12 @@ CREATE TABLE ACCOUNTS (
                           CURRENCY VARCHAR2(3) DEFAULT 'PEN' NOT NULL CHECK (CURRENCY IN ('PEN', 'USD')),
                           BANK_NAME VARCHAR2(100),
                           INITIAL_BALANCE NUMBER(12, 2) DEFAULT 0.00 NOT NULL,
+                          CREDIT_LIMIT NUMBER(12, 2) NULL,
                           CLOSING_DATE NUMBER(2),
                           PAYMENT_DATE NUMBER(2),
                           IS_ACTIVE NUMBER(1) DEFAULT 1 NOT NULL CHECK (IS_ACTIVE IN (0, 1))
 );
+
 
 -- 3. CATEGORIES (Actualizada HU-09)
 -- Se mantiene igual, MANAGEMENT_TYPE cubre 'PLANIFICADO_MENSUAL' vs 'DIA_A_DIA'
@@ -265,3 +269,44 @@ ALTER TABLE NOTIFICATIONS ADD CONSTRAINT FK_NOT_USER FOREIGN KEY (USER_ID) REFER
 COMMIT;
 
 SELECT 'Base de Datos FINANCEDB V2 desplegada correctamente.' AS STATUS FROM DUAL;
+
+CREATE SEQUENCE BIL_ID_SEQ START WITH 1 INCREMENT BY 1 NOCACHE NOCYCLE;
+
+-- 2. TABLA: SERVICE_BILLS
+CREATE TABLE SERVICE_BILLS (
+                               ID NUMBER PRIMARY KEY,
+                               USER_ID NUMBER NOT NULL,
+                               CATEGORY_ID NUMBER NOT NULL,
+
+    -- Datos del Recibo
+                               NAME VARCHAR2(150) NOT NULL,
+                               COMPANY VARCHAR2(100),
+                               SERVICE_CODE VARCHAR2(50),   -- Suministro/Contrato
+
+    -- Soporte Multi-moneda (VITAL para HU-04/HU-05)
+                               CURRENCY VARCHAR2(3) DEFAULT 'PEN' NOT NULL CHECK (CURRENCY IN ('PEN', 'USD')),
+                               AMOUNT NUMBER(12, 2) NOT NULL,
+
+                               DUE_DATE DATE NOT NULL,
+
+    -- Estado controlado
+                               STATUS VARCHAR2(20) DEFAULT 'PENDIENTE' NOT NULL CHECK (STATUS IN ('PENDIENTE', 'PAGADO', 'VENCIDO')),
+
+    -- AUDITORÍA DE PAGO (El eslabón perdido del Backend)
+    -- Cuando se pague, aquí guardaremos el ID de la transacción generada.
+    -- Esto permite ir del Recibo al Gasto y viceversa.
+                               TRANSACTION_ID NUMBER UNIQUE,
+
+                               CREATED_AT TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+    -- Relaciones (Integridad Referencial)
+                               CONSTRAINT FK_BILL_USER FOREIGN KEY (USER_ID) REFERENCES USERS (ID) ON DELETE CASCADE,
+                               CONSTRAINT FK_BILL_CAT FOREIGN KEY (CATEGORY_ID) REFERENCES CATEGORIES (ID),
+                               CONSTRAINT FK_BILL_TRX FOREIGN KEY (TRANSACTION_ID) REFERENCES TRANSACTIONS (ID) -- Sin Cascade, historial protegido
+);
+
+-- Índices Recomendados para Rendimiento (Queries de Dashboard)
+CREATE INDEX IDX_BILL_USER_STATUS ON SERVICE_BILLS(USER_ID, STATUS);
+CREATE INDEX IDX_BILL_DUE_DATE ON SERVICE_BILLS(DUE_DATE);
+
+COMMIT;

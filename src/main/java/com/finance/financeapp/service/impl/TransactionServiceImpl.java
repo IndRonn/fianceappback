@@ -101,24 +101,30 @@ public class TransactionServiceImpl implements ITransactionService {
     @Transactional
     public TransactionResponse createTransaction(TransactionRequest request) {
         User user = getAuthenticatedUser();
+
+        // 1. Construir entidad base
         Transaction transaction = transactionMapper.toEntity(request);
         transaction.setUser(user);
 
+        // 2. Asignar Cuenta Origen
         Account sourceAccount = findAccountAndVerifyOwnership(request.getAccountId(), user.getId(), "Origen");
         transaction.setAccount(sourceAccount);
 
-        applyTransactionLogic(transaction, request, sourceAccount, user.getId());
-
+        // 3. Asignar Etiquetas (Hacemos esto ANTES de la lógica financiera)
         Set<Tag> tags = getTagsFromRequest(request.getTagIds(), user.getId());
         transaction.setTags(tags);
 
+        // 4. APLICAR LÓGICA FINANCIERA (UNA SOLA VEZ)
+        // Esto valida reglas, asigna categorías/destinos y actualiza saldos.
         applyTransactionLogic(transaction, request, sourceAccount, user.getId());
 
+        // 5. Guardar cambios en Cuentas (Saldos actualizados)
         accountRepository.save(sourceAccount);
         if (transaction.getDestinationAccount() != null) {
             accountRepository.save(transaction.getDestinationAccount());
         }
 
+        // 6. Guardar Transacción y Retornar
         return transactionMapper.toResponse(transactionRepository.save(transaction));
     }
 

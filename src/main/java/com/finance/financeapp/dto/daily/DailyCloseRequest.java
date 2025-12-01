@@ -14,7 +14,7 @@ public class DailyCloseRequest {
     private LocalDate date;
 
     @NotNull
-    @DecimalMin("0.01")
+    @DecimalMin("0.00")
     private BigDecimal amount; // El monto sobrante que queremos procesar
 
     // Acción a tomar: "SAVE" (Ahorrar) o "ROLLOVER" (Dejarlo para mañana - no hace nada en BD)

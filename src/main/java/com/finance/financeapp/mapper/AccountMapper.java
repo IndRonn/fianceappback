@@ -13,75 +13,58 @@ import org.springframework.stereotype.Component;
 @Component
 public class AccountMapper {
 
-    /**
-     * Transforma un Request (DTO) a una Entidad JPA.
-     * Se usa al crear una cuenta nueva.
-     */
     public Account toEntity(AccountRequest request) {
-        if (request == null) {
-            return null;
-        }
+        if (request == null) return null;
 
         return Account.builder()
-                // ID y User se ignoran aquí (se manejan en el servicio/BD)
                 .name(request.getName())
                 .type(request.getType())
-                // Lógica de Negocio: Valor por defecto para banco si es nulo
+                .currency(request.getCurrency()) // Recuerda que ya añadimos esto antes
                 .bankName(request.getBankName() != null ? request.getBankName() : "N/A")
                 .initialBalance(request.getInitialBalance())
+                // --- NUEVO MAPEO ---
+                .creditLimit(request.getCreditLimit())
                 .closingDate(request.getClosingDate())
                 .paymentDate(request.getPaymentDate())
-                .currency(request.getCurrency())
-                .isActive(true) // Por defecto activa al crear
+                .isActive(true)
                 .build();
     }
 
-    /**
-     * Transforma una Entidad JPA a un Response (DTO).
-     * Se usa para devolver datos al frontend.
-     */
     public AccountResponse toResponse(Account account) {
-        if (account == null) {
-            return null;
-        }
+        if (account == null) return null;
 
         return AccountResponse.builder()
                 .id(account.getId())
                 .name(account.getName())
-                .type(account.getType()) // El Enum viaja tal cual
+                .type(account.getType())
+                .currency(account.getCurrency())
                 .bankName(account.getBankName())
                 .initialBalance(account.getInitialBalance())
-                .currency(account.getCurrency())
+                // --- NUEVO MAPEO ---
+                .creditLimit(account.getCreditLimit())
+                .closingDate(account.getClosingDate())
+                .paymentDate(account.getPaymentDate())
                 .isActive(account.getIsActive())
                 .build();
     }
 
-    /**
-     * Actualiza una entidad existente con los datos del Request.
-     * Implementación manual del "Merge".
-     */
     public void updateEntityFromRequest(AccountRequest request, Account account) {
-        if (request == null || account == null) {
-            return;
-        }
+        if (request == null || account == null) return;
 
-        if (request.getCurrency() != null) {
-            account.setCurrency(request.getCurrency());
-        }
-
-        // Solo actualizamos los campos permitidos
         account.setName(request.getName());
         account.setType(request.getType());
-
-        // Manejo de nulo para BankName en actualización
-        if (request.getBankName() != null) {
-            account.setBankName(request.getBankName());
-        }
+        account.setCurrency(request.getCurrency());
+        if (request.getBankName() != null) account.setBankName(request.getBankName());
 
         account.setInitialBalance(request.getInitialBalance());
+
+        // --- NUEVO MAPEO ---
+        // Permitimos actualizar el límite (ej: el banco te aumentó la línea)
+        if (request.getCreditLimit() != null) {
+            account.setCreditLimit(request.getCreditLimit());
+        }
+
         account.setClosingDate(request.getClosingDate());
         account.setPaymentDate(request.getPaymentDate());
-
-        // Nota: isActive no se actualiza aquí, suele requerir un endpoint de "soft delete" específico.
     }
 }
