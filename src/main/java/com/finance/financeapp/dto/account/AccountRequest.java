@@ -40,4 +40,11 @@ public class AccountRequest {
 
     @NotNull(message = "La moneda es obligatoria")
     private CurrencyType currency;
+
+    // [NUEVO] Para inicializar tarjetas de crédito con precisión
+    @DecimalMin(value = "0.00")
+    private BigDecimal previousBalance; // Deuda del ciclo cerrado
+
+    @DecimalMin(value = "0.00")
+    private BigDecimal currentBalance;  // Deuda del ciclo en curso
 }

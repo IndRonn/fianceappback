@@ -1,11 +1,14 @@
 package com.finance.financeapp.service.impl;
 
 import com.finance.financeapp.domain.enums.AccountType;
+import com.finance.financeapp.domain.enums.TransactionType;
 import com.finance.financeapp.dto.account.AccountRequest;
 import com.finance.financeapp.dto.account.AccountResponse;
 import com.finance.financeapp.exception.custom.BusinessRuleException;
+import com.finance.financeapp.exception.custom.ResourceNotFoundException;
 import com.finance.financeapp.mapper.AccountMapper;
 import com.finance.financeapp.model.Account;
+import com.finance.financeapp.model.Transaction;
 import com.finance.financeapp.model.User;
 import com.finance.financeapp.repository.IAccountRepository;
 import com.finance.financeapp.repository.ITransactionRepository;
@@ -28,21 +31,92 @@ public class AccountServiceImpl implements IAccountService {
 
     private final IAccountRepository accountRepository;
     private final IUserRepository userRepository;
-    private final AccountMapper accountMapper; // Inyección del Mapper
-    private final ITransactionRepository transactionRepository;
+    private final AccountMapper accountMapper;
+    private final ITransactionRepository transactionRepository; // Inyección necesaria para la inicialización
 
     // --- Helper Methods ---
 
     private User getAuthenticatedUser() {
         String username = SecurityContextHolder.getContext().getAuthentication().getName();
         return userRepository.findByUsername(username)
-                .orElseThrow(() -> new IllegalArgumentException("Usuario no encontrado en contexto."));
+                .orElseThrow(() -> new ResourceNotFoundException("Usuario no encontrado en contexto."));
     }
 
     private Account findAccountAndVerifyOwnership(Long accountId, Long userId) {
         return accountRepository.findById(accountId)
                 .filter(a -> a.getUser().getId().equals(userId))
-                .orElseThrow(() -> new IllegalArgumentException("Cuenta no encontrada o acceso denegado."));
+                .orElseThrow(() -> new ResourceNotFoundException("Cuenta no encontrada o acceso denegado."));
+    }
+
+    // --- Lógica de Inicialización de Tarjetas (Métodos Privados) ---
+
+    private void initializeCreditCardHistory(Account account, AccountRequest request, User user) {
+        // A. Carga del Ciclo ANTERIOR (Fecha: Cierre mes pasado - 1 día)
+        if (request.getPreviousBalance() != null && request.getPreviousBalance().compareTo(BigDecimal.ZERO) > 0) {
+            // Calcular fecha segura en el pasado
+            int closingDay = account.getClosingDate() != null ? account.getClosingDate() : 15;
+            LocalDate pastDate = LocalDate.now().minusMonths(1).withDayOfMonth(closingDay).minusDays(1);
+
+            createInitializationTransaction(account, request.getPreviousBalance(), pastDate.atStartOfDay(), "Saldo Inicial - Ciclo Anterior");
+        }
+
+        // B. Carga del Ciclo ACTUAL (Fecha: Hoy)
+        if (request.getCurrentBalance() != null && request.getCurrentBalance().compareTo(BigDecimal.ZERO) > 0) {
+            createInitializationTransaction(account, request.getCurrentBalance(), LocalDateTime.now(), "Saldo Inicial - Ciclo Actual");
+        }
+    }
+
+    private void createInitializationTransaction(Account account, BigDecimal amount, LocalDateTime date, String desc) {
+        Transaction trx = Transaction.builder()
+                .account(account)
+                .amount(amount)
+                .type(TransactionType.GASTO)
+                .description(desc)
+                .transactionDate(date)
+                .exchangeRate(BigDecimal.ONE)
+                .user(account.getUser())
+                .build();
+
+        // Guardamos la transacción
+        transactionRepository.save(trx);
+
+        // Actualizamos el saldo de la cuenta (Deuda sube)
+        account.setInitialBalance(account.getInitialBalance().add(amount));
+        accountRepository.save(account);
+    }
+
+    /**
+     * Calcula el consumo del ciclo de facturación actual o cerrado.
+     */
+    private BigDecimal calculateBillingCycleBalance(Account account) {
+        LocalDate today = LocalDate.now();
+        int closingDay = account.getClosingDate() != null ? account.getClosingDate() : 15;
+
+        LocalDateTime cutoffDate;
+
+        if (today.getDayOfMonth() <= closingDay) {
+            // CASO A: Ciclo Abierto (Ej: Hoy 2 Dic, Cierre 15)
+            // El usuario aún está comprando para el ciclo de Diciembre.
+            // El "Recibo" que debe pagar ahora es el que cerró en NOVIEMBRE.
+
+            LocalDate lastMonth = today.minusMonths(1);
+            int safeClosingDay = Math.min(closingDay, lastMonth.lengthOfMonth());
+
+            // Corte: 15 de Noviembre 23:59:59
+            cutoffDate = lastMonth.withDayOfMonth(safeClosingDay).atTime(23, 59, 59);
+        } else {
+            // CASO B: Ciclo Cerrado (Ej: Hoy 16 Dic, Cierre 15)
+            // El ciclo de Diciembre ya cerró ayer.
+            // El "Recibo" a pagar es el de DICIEMBRE.
+
+            // Corte: 15 de Diciembre 23:59:59
+            cutoffDate = today.withDayOfMonth(closingDay).atTime(23, 59, 59);
+        }
+
+        // Ejecutamos la suma "Hasta el Corte"
+        // Esto incluirá la "Deuda Histórica" (transacciones antiguas) y los gastos del ciclo cerrado.
+        // EXCLUIRÁ todo lo que hayas comprado después de esa fecha (ej: hoy).
+        return transactionRepository.getExpensesUpTo(account.getId(), cutoffDate);
     }
 
     // --- CRUD Implementations ---
@@ -52,8 +126,7 @@ public class AccountServiceImpl implements IAccountService {
     public AccountResponse createAccount(AccountRequest request) {
         User user = getAuthenticatedUser();
 
-        // 1. VALIDACIÓN HARD MODE: Integridad de Tarjetas de Crédito
-        // Si es tarjeta de crédito, EXIGIMOS límite y fechas de corte.
+        // 1. VALIDACIÓN HARD MODE
         if (request.getType() == AccountType.CREDITO) {
             if (request.getCreditLimit() == null) {
                 throw new BusinessRuleException("El límite de crédito es obligatorio para tarjetas de crédito.");
@@ -63,12 +136,26 @@ public class AccountServiceImpl implements IAccountService {
             }
         }
 
-        // 2. Convertir y Asignar
+        // 2. Mapeo (AQUÍ ESTÁ LA LÍNEA QUE FALTABA)
         Account account = accountMapper.toEntity(request);
         account.setUser(user);
 
-        // 3. Guardar y Retornar
-        return accountMapper.toResponse(accountRepository.save(account));
+        // 3. Lógica de Inicialización de Saldo para TC
+        // Al crear, forzamos saldo 0 si es TC, porque lo llenaremos con transacciones a continuación
+        if (request.getType() == AccountType.CREDITO) {
+            account.setInitialBalance(BigDecimal.ZERO);
+        }
+
+        // 4. Guardar Entidad Base
+        Account savedAccount = accountRepository.save(account);
+
+        // 5. Generar Historial (Si aplica)
+        if (request.getType() == AccountType.CREDITO) {
+            initializeCreditCardHistory(savedAccount, request, user);
+        }
+
+        // 6. Retornar
+        return accountMapper.toResponse(savedAccount);
     }
 
     @Override
@@ -77,18 +164,29 @@ public class AccountServiceImpl implements IAccountService {
         User user = getAuthenticatedUser();
         List<Account> accounts = accountRepository.findByUserId(user.getId());
 
-        // Mapeamos y calculamos el statementBalance para cada cuenta
         return accounts.stream()
                 .map(account -> {
                     AccountResponse response = accountMapper.toResponse(account);
 
-                    // Lógica solo para Tarjetas de Crédito
                     if (account.getType() == AccountType.CREDITO && account.getClosingDate() != null) {
+                        // 1. Calcular Deuda Facturada (Corte)
                         BigDecimal statementBalance = calculateBillingCycleBalance(account);
                         response.setStatementBalance(statementBalance);
+
+                        // 2. Calcular Deuda Ciclo Actual (Total - Facturada)
+                        // Si initialBalance es la deuda total, y statement es la vieja...
+                        // La diferencia es lo nuevo.
+                        BigDecimal totalDebt = account.getInitialBalance();
+                        BigDecimal currentCycle = totalDebt.subtract(statementBalance);
+
+                        // Validación visual (por si acaso hay inconsistencias de datos negativos)
+                        if (currentCycle.compareTo(BigDecimal.ZERO) < 0) currentCycle = BigDecimal.ZERO;
+
+                        response.setCurrentCycleBalance(currentCycle);
+
                     } else {
-                        // Para débito/efectivo, el statement balance no aplica (o es igual al saldo)
                         response.setStatementBalance(BigDecimal.ZERO);
+                        response.setCurrentCycleBalance(BigDecimal.ZERO);
                     }
 
                     return response;
@@ -96,75 +194,25 @@ public class AccountServiceImpl implements IAccountService {
                 .collect(Collectors.toList());
     }
 
-    private BigDecimal calculateBillingCycleBalance(Account account) {
-        LocalDate today = LocalDate.now();
-        int closingDay = account.getClosingDate();
-
-        // Determinar fechas del ciclo
-        LocalDateTime startOfCycle;
-        LocalDateTime endOfCycle;
-
-        // Lógica de fechas (Caso A vs Caso B)
-        if (today.getDayOfMonth() <= closingDay) {
-            // CASO A: Ciclo Abierto (Estamos antes del cierre de este mes)
-            // El ciclo empezó el mes pasado (día cierre + 1)
-            // Termina HOY (para ver el acumulado al momento)
-            LocalDate lastMonthDate = today.minusMonths(1);
-
-            // Manejo de bordes (ej: cierre día 31 en mes de 30 días)
-            int safeClosingDay = Math.min(closingDay, lastMonthDate.lengthOfMonth());
-
-            startOfCycle = lastMonthDate.withDayOfMonth(safeClosingDay).plusDays(1).atStartOfDay();
-            endOfCycle = LocalDateTime.now(); // Hasta el momento actual
-        } else {
-            // CASO B: Ciclo Cerrado (Estamos después del cierre)
-            // El ciclo empezó este mes (día cierre del mes pasado + 1... espera, no)
-            // Si hoy es 25 y cierra el 20:
-            // El ciclo que YA CERRÓ fue del 21 del mes pasado al 20 de este mes.
-            // Pero el usuario quiere saber "¿Qué estoy acumulando para el PRÓXIMO?" o "¿Qué debo pagar YA?"
-
-            // Según tu requerimiento: "Caso B: Ciclo Cerrado... suma estática... hasta ClosingDate este mes".
-            // Esto significa que mostramos la DEUDA YA CERRADA que se debe pagar pronto.
-
-            LocalDate lastMonthDate = today.minusMonths(1);
-            int safeLastClosing = Math.min(closingDay, lastMonthDate.lengthOfMonth());
-
-            startOfCycle = lastMonthDate.withDayOfMonth(safeLastClosing).plusDays(1).atStartOfDay();
-            endOfCycle = today.withDayOfMonth(closingDay).atTime(23, 59, 59);
-        }
-
-        // Ejecutar consulta
-        return transactionRepository.getCycleExpenses(account.getId(), startOfCycle, endOfCycle);
-    }
-
     @Override
     @Transactional
     public AccountResponse updateAccount(Long accountId, AccountRequest request) {
         User user = getAuthenticatedUser();
-
-        // 1. Verificar existencia y propiedad
         Account account = findAccountAndVerifyOwnership(accountId, user.getId());
 
-        // 2. VALIDACIÓN HARD MODE EN UPDATE
-        // Si la cuenta ES o SE VUELVE de Crédito, validamos la integridad
+        // Validaciones de Integridad en Update
         if (request.getType() == AccountType.CREDITO) {
-            // Caso A: Era Débito y ahora es Crédito -> Debe traer límite
             if (account.getType() != AccountType.CREDITO && request.getCreditLimit() == null) {
                 throw new BusinessRuleException("Al cambiar a tipo CRÉDITO, debes especificar un límite.");
             }
-            // Caso B: Ya era Crédito -> Si manda fechas nulas, error (si intenta borrarlas)
-            // (Esta validación depende de si tu DTO permite nulos parciales, por ahora aseguramos integridad básica)
         }
 
-        // 3. Actualizar la entidad
         accountMapper.updateEntityFromRequest(request, account);
 
-        // 4. Doble Check post-mapeo (Cinturón y Tirantes)
         if (account.getType() == AccountType.CREDITO && account.getCreditLimit() == null) {
             throw new BusinessRuleException("La tarjeta de crédito no puede quedar sin límite.");
         }
 
-        // 5. Guardar
         return accountMapper.toResponse(accountRepository.save(account));
     }
 

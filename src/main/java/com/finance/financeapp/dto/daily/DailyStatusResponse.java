@@ -11,22 +11,23 @@ import java.time.LocalDate;
 public class DailyStatusResponse {
     private LocalDate date;
 
-    // El "Número Mágico": Cuánto puedo gastar HOY
+    // Métricas de Hoy
     private BigDecimal availableForToday;
-
-    // Contexto
-    private BigDecimal totalMonthLimit; // Suma de todos los presupuestos variables
-    private BigDecimal totalMonthSpent; // Lo que ya gasté en variables
-    private int remainingDays;          // Días que faltan para acabar el mes
-
-    // Semáforo Diario (Diferente al mensual)
-    // ON_TRACK (Vas bien), OVERSPENT (Te pasaste hoy, mañana tendrás menos)
+    private BigDecimal totalMonthLimit;
+    private BigDecimal totalMonthSpent;
+    private int remainingDays;
     private String status;
 
-    // Retrospectiva: ¿Cuánto gasté ayer en "Día a Día"?
+    // Gamificación
     private BigDecimal yesterdaySpent;
-
-    // Motivación: ¿Cuánto tendré mañana si hoy gasto 0?
-    // Fórmula: (DisponibleHoy * DiasRestantes) / (DiasRestantes - 1)
     private BigDecimal projectedAvailableTomorrow;
+
+    // [NUEVO] El dato que pide el Frontend
+    private BigDecimal yesterdaySaved;
+
+    private BigDecimal dailyLimit;
+
+    // [NUEVO] Lo que has gastado HOY
+    // Ejemplo: 2.00
+    private BigDecimal spentToday;// (DisponibleAyer - GastoAyer)
 }

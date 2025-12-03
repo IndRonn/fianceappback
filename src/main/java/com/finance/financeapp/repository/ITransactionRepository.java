@@ -58,4 +58,13 @@ public interface ITransactionRepository extends JpaRepository<Transaction, Long>
             @Param("startDate") LocalDateTime startDate,
             @Param("endDate") LocalDateTime endDate
     );
+
+    @Query("""
+        SELECT COALESCE(SUM(t.amount), 0)
+        FROM Transaction t
+        WHERE t.account.id = :accountId
+          AND t.type = 'GASTO'
+          AND t.transactionDate <= :cutoffDate
+    """)
+    BigDecimal getExpensesUpTo(@Param("accountId") Long accountId, @Param("cutoffDate") LocalDateTime cutoffDate);
 }

@@ -23,7 +23,9 @@ public class AccountResponse {
     private Integer closingDate; // Día de cierre (1-31)
     private Integer paymentDate; // Día de pago (1-31)
 
-    // --- NUEVO CAMPO: BALANCE DEL CICLO ---
-    // Este es el que faltaba y causaba el error
+    // Deuda Facturada (A pagar ya / Ciclo Cerrado o Anterior)
     private BigDecimal statementBalance;
+
+    // [NUEVO] Deuda del Ciclo Actual (Lo que estás comprando ahora, para el próx. mes)
+    private BigDecimal currentCycleBalance;
 }

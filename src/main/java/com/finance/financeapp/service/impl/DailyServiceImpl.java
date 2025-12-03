@@ -53,78 +53,134 @@ public class DailyServiceImpl implements IDailyService {
         LocalDate today = LocalDate.now();
         YearMonth currentMonth = YearMonth.from(today);
 
-        // Rango Mes Actual
+        // Rangos de Tiempo
         LocalDateTime startOfMonth = currentMonth.atDay(1).atStartOfDay();
-        LocalDateTime endOfMonth = currentMonth.atEndOfMonth().atTime(23, 59, 59);
-
-        // Rango Ayer (Para retrospectiva)
-        LocalDateTime startOfYesterday = today.minusDays(1).atStartOfDay();
+        // Fin de ayer (Para calcular lo acumulado histórico)
         LocalDateTime endOfYesterday = today.minusDays(1).atTime(23, 59, 59);
 
-        // 2. Obtener Presupuestos Día a Día (Planificado Total)
+        // Rango de HOY (Para restar directo)
+        LocalDateTime startOfToday = today.atStartOfDay();
+        LocalDateTime endOfToday = today.atTime(23, 59, 59);
+
+        // 2. Obtener Presupuesto Total Variable (La Bolsa)
         List<Budget> variableBudgets = budgetRepository.findByUserIdAndMonthAndYearAndType(
                 user.getId(), today.getMonthValue(), today.getYear(), ManagementType.DIA_A_DIA
         );
-
         BigDecimal totalLimit = variableBudgets.stream()
                 .map(Budget::getAmount)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
-        // 3. Gastos Reales (Acumulado Mes)
-        BigDecimal totalSpent = transactionRepository.sumTotalVariableExpenses(
-                user.getId(), startOfMonth, endOfMonth
-        );
+        // 3. Obtener Gastos Separados (Pasado vs Presente)
 
-        // --- NUEVO CÁLCULO: Gasto de Ayer ---
-        BigDecimal yesterdaySpent = transactionRepository.sumTotalVariableExpenses(
-                user.getId(), startOfYesterday, endOfYesterday
-        );
+        // A. Gastos Históricos (Desde el 1ro hasta Ayer)
+        // Nota: Si hoy es día 1, esto debería ser 0 o manejar el rango correctamente.
+        BigDecimal spentUntilYesterday = BigDecimal.ZERO;
+        if (today.getDayOfMonth() > 1) {
+            spentUntilYesterday = transactionRepository.sumTotalVariableExpenses(
+                    user.getId(), startOfMonth, endOfYesterday
+            );
+        }
+        if (spentUntilYesterday == null) spentUntilYesterday = BigDecimal.ZERO;
 
-        // 4. Cálculos de Disponibilidad
-        BigDecimal remainingBudget = totalLimit.subtract(totalSpent);
+        // B. Gastos de HOY (Impacto Directo)
+        BigDecimal spentToday = transactionRepository.sumTotalVariableExpenses(
+                user.getId(), startOfToday, endOfToday
+        );
+        if (spentToday == null) spentToday = BigDecimal.ZERO;
+
+        // C. Gasto Total (Solo para mostrar el acumulado en el dashboard)
+        BigDecimal totalSpent = spentUntilYesterday.add(spentToday);
+
+        // 4. El Nuevo Algoritmo "Modo Estricto"
         int daysInMonth = currentMonth.lengthOfMonth();
         int daysPassed = today.getDayOfMonth() - 1;
-        int remainingDays = daysInMonth - daysPassed;
+        int remainingDays = daysInMonth - daysPassed; // Incluye hoy
 
         if (remainingDays <= 0) remainingDays = 1;
 
-        // Disponible HOY
-        BigDecimal availableToday = BigDecimal.ZERO;
-        if (remainingBudget.compareTo(BigDecimal.ZERO) > 0) {
-            availableToday = remainingBudget.divide(BigDecimal.valueOf(remainingDays), 2, RoundingMode.FLOOR);
-        }
+        // Paso 1: ¿Con cuánto dinero amanecimos hoy?
+        BigDecimal remainingStartOfToday = totalLimit.subtract(spentUntilYesterday);
 
-        // --- NUEVO CÁLCULO: Proyección Mañana (Motivación) ---
-        // Si no gastas nada hoy, esto tendrás mañana.
-        BigDecimal projectedTomorrow = BigDecimal.ZERO;
-
-        // Lógica: Si hoy no gasto, mañana tendré el mismo remainingBudget, pero dividido entre (días - 1).
-        if (remainingDays > 1 && remainingBudget.compareTo(BigDecimal.ZERO) > 0) {
-            projectedTomorrow = remainingBudget.divide(
-                    BigDecimal.valueOf(remainingDays - 1),
-                    2,
-                    RoundingMode.FLOOR
+        // Paso 2: Calcular la Cuota Base de Hoy (Antes de gastar nada hoy)
+        // Esta es tu "Asignación Diaria Blindada"
+        BigDecimal baseDailyBudget = BigDecimal.ZERO;
+        if (remainingStartOfToday.compareTo(BigDecimal.ZERO) > 0) {
+            baseDailyBudget = remainingStartOfToday.divide(
+                    BigDecimal.valueOf(remainingDays), 2, RoundingMode.FLOOR
             );
-        } else if (remainingDays == 1) {
-            // Si es el último día, lo que sobra es ahorro puro (o disponible del 1ro del sig mes, según se vea)
-            projectedTomorrow = remainingBudget;
         }
 
-        // 5. Semáforo
+        // Paso 3: Resta Directa (Sin suavizado)
+        // Disponible = Lo que me tocaba hoy - Lo que gasté hoy
+        BigDecimal availableToday = baseDailyBudget.subtract(spentToday);
+
+        // 5. Cálculos de Gamificación (Ayer y Mañana)
+
+        // Gasto de Ayer (Para retrospectiva)
+        // Requerimos consultar solo el rango de ayer específico
+        LocalDateTime startOfYesterday = today.minusDays(1).atStartOfDay();
+        BigDecimal yesterdaySpent = transactionRepository.sumTotalVariableExpenses(
+                user.getId(), startOfYesterday, endOfYesterday
+        );
+        if (yesterdaySpent == null) yesterdaySpent = BigDecimal.ZERO;
+
+        // Cálculo de Ahorro de Ayer (Recalculando la base de ayer)
+        BigDecimal yesterdaySaved = BigDecimal.ZERO;
+        if (today.getDayOfMonth() > 1) {
+            // Lógica simplificada: Si no guardamos histórico, re-calculamos.
+            // Para no hacer 3 queries más, una aproximación aceptable es:
+            // Ahorro = (Presupuesto / DíasTotales) - GastoAyer? NO, eso es impreciso.
+            // Mantenemos la lógica anterior de yesterdaySaved o la simplificamos a 0 por ahora
+            // para no sobrecargar la base de datos si no es crítico.
+            // Dejaremos yesterdaySaved en 0 o requeriría la lógica compleja anterior.
+            // Por eficiencia, usa la lógica que te di en el mensaje anterior para yesterdaySaved
+            // o asume 0 si quieres ahorrar cómputo.
+            // (Aquí pego la lógica completa para que no falte nada):
+
+            LocalDateTime endOfBeforeYesterday = today.minusDays(2).atTime(23, 59, 59);
+            BigDecimal spentBeforeYesterday = BigDecimal.ZERO;
+            if (today.getDayOfMonth() > 2) {
+                spentBeforeYesterday = transactionRepository.sumTotalVariableExpenses(
+                        user.getId(), startOfMonth, endOfBeforeYesterday
+                );
+            }
+            if (spentBeforeYesterday == null) spentBeforeYesterday = BigDecimal.ZERO;
+
+            BigDecimal remainingStartYesterday = totalLimit.subtract(spentBeforeYesterday);
+            int daysRemainingYesterday = daysInMonth - (today.getDayOfMonth() - 2);
+            BigDecimal baseYesterday = remainingStartYesterday.divide(BigDecimal.valueOf(daysRemainingYesterday), 2, RoundingMode.FLOOR);
+            yesterdaySaved = baseYesterday.subtract(yesterdaySpent);
+        }
+
+        // Proyección Mañana (Si hoy me porto bien y no gasto MÁS)
+        // Mañana mi base será (remainingStartOfToday - spentToday) / (dias - 1)
+        BigDecimal projectedTomorrow = BigDecimal.ZERO;
+        if (remainingDays > 1) {
+            BigDecimal remainingForTomorrow = remainingStartOfToday.subtract(spentToday);
+            if (remainingForTomorrow.compareTo(BigDecimal.ZERO) > 0) {
+                projectedTomorrow = remainingForTomorrow.divide(
+                        BigDecimal.valueOf(remainingDays - 1), 2, RoundingMode.FLOOR
+                );
+            }
+        }
+
+        // 6. Semáforo
         String status = "ON_TRACK";
-        if (remainingBudget.compareTo(BigDecimal.ZERO) < 0) status = "OVERSPENT";
-        else if (availableToday.compareTo(BigDecimal.ZERO) == 0 && remainingDays > 0) status = "STOP";
+        if (remainingStartOfToday.compareTo(BigDecimal.ZERO) < 0) status = "OVERSPENT"; // Ya amanecí en rojo
+        else if (availableToday.compareTo(BigDecimal.ZERO) < 0) status = "STOP"; // Me gasté la de hoy (y más)
 
         return DailyStatusResponse.builder()
                 .date(today)
-                .availableForToday(availableToday)
+                .availableForToday(availableToday) // AHORA ES ESTRICTO
                 .totalMonthLimit(totalLimit)
                 .totalMonthSpent(totalSpent)
                 .remainingDays(remainingDays)
                 .status(status)
-                // Nuevos campos
                 .yesterdaySpent(yesterdaySpent)
                 .projectedAvailableTomorrow(projectedTomorrow)
+                .yesterdaySaved(yesterdaySaved)
+                .dailyLimit(baseDailyBudget) // Tu "11.83" original
+                .spentToday(spentToday)
                 .build();
     }
 
