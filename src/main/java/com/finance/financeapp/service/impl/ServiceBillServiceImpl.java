@@ -58,7 +58,9 @@ public class ServiceBillServiceImpl implements IServiceBillService {
         ServiceBill bill = billMapper.toEntity(request);
         bill.setUser(user);
         bill.setCategory(category);
-
+        if (request.getDueDate().isBefore(LocalDateTime.now().toLocalDate())) {
+            throw new BusinessRuleException("La fecha de vencimiento no puede ser anterior a hoy.");
+        }
         return billMapper.toResponse(billRepository.save(bill));
     }
 
