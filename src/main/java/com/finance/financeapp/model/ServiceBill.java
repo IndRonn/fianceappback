@@ -1,6 +1,6 @@
 package com.finance.financeapp.model;
 
-import com.finance.financeapp.domain.enums.BillFrequency;
+import com.finance.financeapp.domain.enums.Frequency;
 import com.finance.financeapp.domain.enums.CurrencyType;
 import jakarta.persistence.*;
 import lombok.*;
@@ -72,5 +72,5 @@ public class ServiceBill {
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
-    private BillFrequency frequency;
+    private Frequency frequency;
 }

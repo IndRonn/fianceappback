@@ -1,6 +1,6 @@
 package com.finance.financeapp.dto.bill;
 
-import com.finance.financeapp.domain.enums.BillFrequency;
+import com.finance.financeapp.domain.enums.Frequency;
 import com.finance.financeapp.domain.enums.CurrencyType;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotBlank;
@@ -31,5 +31,5 @@ public class BillRequest {
     @NotNull(message = "La fecha de vencimiento es obligatoria")
     private LocalDate dueDate;
 
-    private BillFrequency frequency;
+    private Frequency frequency;
 }

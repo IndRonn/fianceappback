@@ -1,6 +1,8 @@
 package com.finance.financeapp.domain.enums;
 
-public enum BillFrequency {
+public enum Frequency {
+    DIARIO,    // <--- Faltaba
+    SEMANAL,   // <--- Faltaba
     UNICO,
     MENSUAL,
     BIMENSUAL,

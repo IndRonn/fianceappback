@@ -286,7 +286,7 @@ CREATE TABLE SERVICE_BILLS (
     -- Soporte Multi-moneda (VITAL para HU-04/HU-05)
                                CURRENCY VARCHAR2(3) DEFAULT 'PEN' NOT NULL CHECK (CURRENCY IN ('PEN', 'USD')),
                                AMOUNT NUMBER(12, 2) NOT NULL,
-
+                               FREQUENCY VARCHAR2(20),
                                DUE_DATE DATE NOT NULL,
 
     -- Estado controlado
@@ -299,6 +299,7 @@ CREATE TABLE SERVICE_BILLS (
 
                                CREATED_AT TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 
+                               CONSTRAINT chk_bill_frequency CHECK (FREQUENCY IN ('UNICO', 'MENSUAL', 'BIMENSUAL', 'TRIMESTRAL', 'SEMESTRAL', 'ANUAL')),
     -- Relaciones (Integridad Referencial)
                                CONSTRAINT FK_BILL_USER FOREIGN KEY (USER_ID) REFERENCES USERS (ID) ON DELETE CASCADE,
                                CONSTRAINT FK_BILL_CAT FOREIGN KEY (CATEGORY_ID) REFERENCES CATEGORIES (ID),

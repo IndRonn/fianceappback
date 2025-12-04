@@ -1,6 +1,6 @@
 package com.finance.financeapp.dto.bill;
 
-import com.finance.financeapp.domain.enums.BillFrequency;
+import com.finance.financeapp.domain.enums.Frequency;
 import com.finance.financeapp.domain.enums.CurrencyType;
 import com.finance.financeapp.model.ServiceBill.BillStatus;
 import lombok.Builder;
@@ -23,5 +23,5 @@ public class BillResponse {
     private LocalDate dueDate;
     private BillStatus status;
     private Long transactionId; // Link a la transacción de pago
-    private BillFrequency frequency;
+    private Frequency frequency;
 }
